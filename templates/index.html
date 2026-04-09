@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- ════════════════════════════════════════════════════════════════
+         Complex Random Process Analysis for Communication Systems
+         with Applications to Speech Enhancement
+         ════════════════════════════════════════════════════════════════
+         Authors: Navin Kumar PG (24BEC1055)
+                  A.P. Anirudh    (24BEC1158)
+                  Kailash N H     (24BEC1546)
+         Faculty: Dr. Kalaivan K
+         ════════════════════════════════════════════════════════════════ -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Complex Random Process Analysis for Communication Systems with Applications to Speech Enhancement — An interactive DSP & AI-powered speech enhancement platform by VIT students.">
+    <meta name="keywords"
+        content="DSP, AWGN, Butterworth filter, speech enhancement, random process, VIT, signal processing">
+    <meta name="author" content="Navin Kumar PG, A.P. Anirudh, Kailash N H">
+    <meta name="robots" content="index, follow">
+
+    <title>Complex Random Process Analysis | Speech Enhancement Platform</title>
+
+    <!-- ── Google Fonts ──────────────────────────────────────────────── -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+
+    <!-- ── Chart.js CDN ──────────────────────────────────────────────── -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+    <!-- ── Custom Stylesheet ─────────────────────────────────────────── -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <!-- ── Favicon (inline SVG) ──────────────────────────────────────── -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+</head>
+
+<body>
+    <!-- ════════════════════════════════════════════════════════════════
+         BACKGROUND ANIMATION — Floating Particles
+         ════════════════════════════════════════════════════════════════ -->
+    <div class="bg-particles" id="bgParticles" aria-hidden="true">
+        <div class="particle particle-1"></div>
+        <div class="particle particle-2"></div>
+        <div class="particle particle-3"></div>
+        <div class="particle particle-4"></div>
+        <div class="particle particle-5"></div>
+        <div class="particle particle-6"></div>
+        <div class="particle particle-7"></div>
+        <div class="particle particle-8"></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         ANIMATED BACKGROUND CANVAS — Per-Page Thematic Visuals
+         ════════════════════════════════════════════════════════════════ -->
+    <canvas class="page-bg-canvas" id="pageBgCanvas" aria-hidden="true"></canvas>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         NAVIGATION BAR
+         ════════════════════════════════════════════════════════════════ -->
+    <nav class="navbar glass-card" id="mainNav">
+        <div class="nav-brand">
+            <span class="nav-icon">📡</span>
+            <span class="nav-title">RP Analysis</span>
+            <span class="nav-badge">VIT</span>
+        </div>
+        <div class="nav-progress">
+            <div class="progress-steps">
+                <div class="progress-step active" data-page="1" id="navStep1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">Welcome</span>
+                </div>
+                <div class="progress-connector"></div>
+                <div class="progress-step" data-page="2" id="navStep2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">Docs</span>
+                </div>
+                <div class="progress-connector"></div>
+                <div class="progress-step" data-page="3" id="navStep3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">Input</span>
+                </div>
+                <div class="progress-connector"></div>
+                <div class="progress-step" data-page="4" id="navStep4">
+                    <span class="step-number">4</span>
+                    <span class="step-label">Process</span>
+                </div>
+                <div class="progress-connector"></div>
+                <div class="progress-step" data-page="5" id="navStep5">
+                    <span class="step-number">5</span>
+                    <span class="step-label">Results</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         MAIN CONTENT AREA
+         ════════════════════════════════════════════════════════════════ -->
+    <main class="main-content" id="mainContent">
+
+        <!-- ════════════════════════════════════════════════════════════
+             PAGE 1: TITLE & SUMMARY (Welcome)
+             ════════════════════════════════════════════════════════════ -->
+        <section class="page page-active" id="page1" data-page="1">
+            <div class="page-inner">
+                <!-- VIT Chennai Logo -->
+                <div class="vit-logo-container">
+                    <img src="{{ url_for('static', filename='img/VIT_Chennai_Logo.png') }}"
+                         alt="VIT Chennai — Vellore Institute of Technology"
+                         class="vit-logo" id="vitLogo">
+                    <div class="vit-logo-text">
+                        <span class="vit-logo-title">RP Project</span>
+                        <span class="vit-logo-subtitle">Random Processes &amp; Analog Communication Lab</span>
+                    </div>
+                </div>
+
+                <!-- Hero Section -->
+                <div class="hero-section">
+                    <div class="hero-badge glass-card">
+                        <span class="badge-icon">🎓</span>
+                        <span>Vellore Institute of Technology</span>
+                    </div>
+
+                    <h1 class="hero-title" id="heroTitle">
+                        <span class="title-line">Complex Random Process</span>
+                        <span class="title-line title-accent">Analysis</span>
+                        <span class="title-line title-sub">for Communication Systems</span>
+                    </h1>
+
+                    <p class="hero-subtitle" id="heroSubtitle">
+                        with Applications to <span class="text-gold">Speech Enhancement</span>
+                    </p>
+
+                    <div class="hero-divider">
+                        <span class="divider-dot"></span>
+                        <span class="divider-line"></span>
+                        <span class="divider-dot"></span>
+                    </div>
+                </div>
+
+                <!-- Project Summary -->
+                <div class="summary-card glass-card" id="summaryCard">
+                    <div class="card-header">
+                        <span class="card-icon">📋</span>
+                        <h2>Project Summary</h2>
+                    </div>
+                    <p class="summary-text" id="summaryText">
+                        This project bridges the gap between theoretical Random Process mathematics and real-world
+                        telecommunications. By actively mitigating <strong>Additive White Gaussian Noise (AWGN)</strong>
+                        in digital channels—such as VoIP, video conferencing, and mobile networks—we apply rigorous
+                        mathematical frameworks to recover degraded audio arrays and extract semantic intelligence.
+                        Aligning with <strong>UN Sustainable Development Goals (SDGs 3, 4, 9, and 10)</strong>, our
+                        system provides an interactive, full-stack digital signal processing environment designed to
+                        ensure accessible, reliable, and intelligent communication.
+                    </p>
+                </div>
+
+                <!-- Team Members Table -->
+                <div class="team-card glass-card" id="teamCard">
+                    <div class="card-header">
+                        <span class="card-icon">👥</span>
+                        <h2>Team Members</h2>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="team-table" id="teamTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Registration No.</th>
+                                    <th>Role</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><span class="member-avatar">NK</span> Navin Kumar PG</td>
+                                    <td><code>24BEC1055</code></td>
+                                    <td>Lead Developer & DSP Engineer</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="member-avatar">AA</span> A.P. Anirudh</td>
+                                    <td><code>24BEC1158</code></td>
+                                    <td>Backend Architect & AI Integration</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="member-avatar">KN</span> Kailash N H</td>
+                                    <td><code>24BEC1546</code></td>
+                                    <td>Frontend Engineer & Data Visualization</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="faculty-info" id="facultyInfo">
+                        <span class="faculty-label">Faculty Guide</span>
+                        <span class="faculty-name">Dr. Kalaivan K</span>
+                    </div>
+                </div>
+
+                <!-- SDG Cards -->
+                <div class="sdg-section" id="sdgSection">
+                    <div class="card-header">
+                        <span class="card-icon">🌍</span>
+                        <h2>Sustainable Development Goals</h2>
+                    </div>
+                    <div class="sdg-grid">
+                        <div class="sdg-card glass-card" id="sdg3">
+                            <div class="sdg-number">3</div>
+                            <h3>Good Health & Well-being</h3>
+                            <p>Clear communication in telemedicine and healthcare systems.</p>
+                        </div>
+                        <div class="sdg-card glass-card" id="sdg4">
+                            <div class="sdg-number">4</div>
+                            <h3>Quality Education</h3>
+                            <p>Enhanced audio quality for e-learning and virtual classrooms.</p>
+                        </div>
+                        <div class="sdg-card glass-card" id="sdg9">
+                            <div class="sdg-number">9</div>
+                            <h3>Industry & Innovation</h3>
+                            <p>Advanced DSP techniques for next-generation telecommunications.</p>
+                        </div>
+                        <div class="sdg-card glass-card" id="sdg10">
+                            <div class="sdg-number">10</div>
+                            <h3>Reduced Inequalities</h3>
+                            <p>Accessible communication technology for underserved communities.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Getting Started Button -->
+                <div class="cta-section" id="ctaSection">
+                    <button class="btn-massive btn-glow" id="btnGetStarted" onclick="showPage(2)">
+                        <span class="btn-icon">🚀</span>
+                        <span class="btn-text">Getting Started</span>
+                        <span class="btn-arrow">→</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════════════
+             PAGE 2: DOCUMENTATION & DOWNLOADS
+             ════════════════════════════════════════════════════════════ -->
+        <section class="page" id="page2" data-page="2">
+            <div class="page-inner">
+                <div class="page-header">
+                    <h1 class="page-title">Documentation & Theory</h1>
+                    <p class="page-description">Mathematical framework, theoretical background, and source code</p>
+                </div>
+
+                <!-- Theoretical Framework -->
+                <div class="theory-card glass-card" id="theoryCard">
+                    <div class="card-header">
+                        <span class="card-icon">📐</span>
+                        <h2>Theoretical Framework: Random Process Signal Flow</h2>
+                    </div>
+                    <div class="theory-content">
+                        <p class="theory-intro">
+                            The mathematical modelling of this system follows the classical communication channel
+                            theory, where a pure message signal is corrupted by stochastic noise and subsequently
+                            recovered using digital signal processing techniques rooted in <strong>Wide-Sense Stationary
+                                (WSS)</strong> and <strong>ergodic random process</strong> methodologies.
+                        </p>
+
+                        <div class="signal-flow">
+                            <!-- Step 1: Transmitter -->
+                            <div class="flow-step" id="flowTransmitter">
+                                <div class="flow-icon">📡</div>
+                                <div class="flow-content">
+                                    <h3>1. Transmitter (Modulated Output)</h3>
+                                    <div class="math-block">
+                                        <code>s(t) = [1 + μ · m(t)] · cos(k<sub>a</sub> · f<sub>c</sub> · t)</code>
+                                    </div>
+                                    <p>
+                                        The pure modulated signal <strong>s(t)</strong> is generated using <em>Amplitude
+                                            Modulation (AM)</em> with modulation index <strong>μ = 0.85</strong> and
+                                        frequency constant <strong>k<sub>a</sub> = 2π</strong>. The message signal m(t)
+                                        is a composite multi-tone waveform simulating the harmonic structure of human
+                                        speech across formant frequencies (150 Hz, 400 Hz, 900 Hz, 2500 Hz, 3200 Hz).
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flow-arrow">▼</div>
+
+                            <!-- Step 2: Channel -->
+                            <div class="flow-step" id="flowChannel">
+                                <div class="flow-icon">📶</div>
+                                <div class="flow-content">
+                                    <h3>2. The Channel (AWGN)</h3>
+                                    <div class="math-block">
+                                        <code>n(t) ~ N(0, σ²)</code>
+                                    </div>
+                                    <p>
+                                        The communication channel introduces stochastic <strong>Additive White Gaussian
+                                            Noise n(t)</strong>, drawn from a zero-mean Gaussian distribution. The noise
+                                        power σ² is calibrated to achieve a specific Signal-to-Noise Ratio (SNR)
+                                        relative to the signal power:
+                                        <code>P<sub>noise</sub> = P<sub>signal</sub> / 10<sup>(SNR/10)</sup></code>.
+                                        This models real-world degradation in VoIP, mobile networks, and video
+                                        conferencing scenarios.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flow-arrow">▼</div>
+
+                            <!-- Step 3: Receiver -->
+                            <div class="flow-step" id="flowReceiver">
+                                <div class="flow-icon">📻</div>
+                                <div class="flow-content">
+                                    <h3>3. Receiver (Demodulator Input)</h3>
+                                    <div class="math-block">
+                                        <code>x(t) = s(t) + n(t)</code>
+                                    </div>
+                                    <p>
+                                        The corrupted signal <strong>x(t)</strong> is the superposition of the desired
+                                        signal s(t) and the stochastic noise n(t). This is the actual audio that arrives
+                                        at the receiver — degraded, noisy, and challenging for both human listeners and
+                                        ASR engines to interpret. The input x(t) array forms the basis for all
+                                        downstream processing.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flow-arrow">▼</div>
+
+                            <!-- Step 4: Processing -->
+                            <div class="flow-step flow-step-highlight" id="flowProcessor">
+                                <div class="flow-icon">⚙️</div>
+                                <div class="flow-content">
+                                    <h3>4. Processing (Demodulator Output)</h3>
+                                    <div class="math-block">
+                                        <code>y(t) = H<sub>Butterworth</sub>(x(t))</code>
+                                    </div>
+                                    <p>
+                                        <strong>Wide-Sense Stationary</strong> and <strong>ergodic random
+                                            process</strong> methodologies are applied via a <strong>4th-order
+                                            Butterworth digital low-pass filter</strong> to extract the signal envelope
+                                        from x(t). The Butterworth filter provides a maximally-flat magnitude response
+                                        in the passband with a roll-off of <em>−80 dB/decade</em>, implemented using
+                                        Second-Order Sections (SOS) for numerical stability and zero-phase
+                                        forward-backward filtering (<code>sosfiltfilt</code>) to eliminate phase
+                                        distortion. The result is the enhanced output <strong>y(t)</strong>.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mathematical Formula Reference -->
+                <div class="theory-card glass-card" id="formulaCard">
+                    <div class="card-header">
+                        <span class="card-icon">📐</span>
+                        <h2>Mathematical Formula Reference</h2>
+                    </div>
+                    <div class="theory-content">
+                        <p class="theory-intro">
+                            Core mathematical expressions governing the Random Process analysis and
+                            Analog Communication signal processing pipeline.
+                        </p>
+
+                        <div class="formula-grid">
+                            <!-- Autocorrelation -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Autocorrelation Function (WSS)</h4>
+                                <div class="formula-center">
+                                    <code>R<sub>xx</sub>(τ) = E[X(t) · X(t + τ)]</code>
+                                </div>
+                                <p class="formula-desc">Measures signal self-similarity across time lag τ. For a WSS process, R<sub>xx</sub> depends only on the lag, not absolute time.</p>
+                            </div>
+
+                            <!-- Power Spectral Density -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Power Spectral Density (Wiener-Khinchin)</h4>
+                                <div class="formula-center">
+                                    <code>S<sub>xx</sub>(f) = ℱ{R<sub>xx</sub>(τ)} = ∫ R<sub>xx</sub>(τ) · e<sup>−j2πfτ</sup> dτ</code>
+                                </div>
+                                <p class="formula-desc">The PSD is the Fourier transform of the autocorrelation — decomposes signal power into frequency components.</p>
+                            </div>
+
+                            <!-- Butterworth Transfer Function -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Butterworth Filter Transfer Function</h4>
+                                <div class="formula-center">
+                                    <code>|H(jΩ)|² = 1 / [1 + (Ω / Ω<sub>c</sub>)<sup>2N</sup>]</code>
+                                </div>
+                                <p class="formula-desc">Maximally-flat magnitude response. N = 4 (filter order), Ω<sub>c</sub> = 4000 Hz (cutoff). Roll-off: −80 dB/decade.</p>
+                            </div>
+
+                            <!-- SNR -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Signal-to-Noise Ratio (dB)</h4>
+                                <div class="formula-center">
+                                    <code>SNR<sub>dB</sub> = 10 · log<sub>10</sub>(P<sub>signal</sub> / P<sub>noise</sub>)</code>
+                                </div>
+                                <p class="formula-desc">Quantifies signal quality. P<sub>signal</sub> = mean(s²(t)), P<sub>noise</sub> = mean(n²(t)). Higher SNR = cleaner signal.</p>
+                            </div>
+
+                            <!-- MSE -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Mean Square Error</h4>
+                                <div class="formula-center">
+                                    <code>MSE = (1/N) · Σ<sub>i=1</sub><sup>N</sup> [s(i) − y(i)]²</code>
+                                </div>
+                                <p class="formula-desc">Measures reconstruction accuracy between original s(t) and recovered y(t). Lower MSE = better enhancement.</p>
+                            </div>
+
+                            <!-- AM Modulation -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Amplitude Modulation (DSB-FC)</h4>
+                                <div class="formula-center">
+                                    <code>s<sub>AM</sub>(t) = A<sub>c</sub>[1 + μ · m(t)] · cos(2πf<sub>c</sub>t)</code>
+                                </div>
+                                <p class="formula-desc">Double-sideband full-carrier modulation. μ = 0.85 (modulation index), f<sub>c</sub> = carrier frequency, m(t) = message signal.</p>
+                            </div>
+
+                            <!-- Noise Power Calibration -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">AWGN Power Calibration</h4>
+                                <div class="formula-center">
+                                    <code>σ² = P<sub>signal</sub> / 10<sup>(SNR<sub>dB</sub>/10)</sup></code>
+                                </div>
+                                <p class="formula-desc">Computes noise variance to achieve a target SNR. Ensures reproducible, calibrated noise injection for testing.</p>
+                            </div>
+
+                            <!-- Ergodic Process -->
+                            <div class="formula-card glass-card">
+                                <h4 class="formula-title">Ergodic Process Condition</h4>
+                                <div class="formula-center">
+                                    <code>⟨X(t)⟩<sub>T</sub> = E[X(t)] as T → ∞</code>
+                                </div>
+                                <p class="formula-desc">Time-average equals ensemble average. Allows statistical inference from a single realisation of the random process.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Report Download -->
+                <div class="report-card glass-card" id="reportCard">
+                    <div class="card-header">
+                        <span class="card-icon">📄</span>
+                        <h2>Project Report</h2>
+                    </div>
+                    <p class="report-description">
+                        Access the comprehensive academic report with detailed mathematical derivations, experimental
+                        results, and analysis.
+                    </p>
+                    <button class="btn-massive btn-glow btn-report" id="btnViewReport" onclick="viewReport()">
+                        <span class="btn-icon">📑</span>
+                        <span class="btn-text">View Full Project Report: Complex Random Process Analysis...</span>
+                        <span class="btn-arrow">↗</span>
+                    </button>
+                </div>
+
+                <!-- Code Showcase -->
+                <div class="code-card glass-card" id="codeCard">
+                    <div class="card-header">
+                        <span class="card-icon">💻</span>
+                        <h2>Source Code Showcase</h2>
+                    </div>
+                    <div class="code-tabs" id="codeTabs">
+                        <button class="code-tab active" data-file="app.py" onclick="loadSourceCode('app.py', this)"
+                            id="tabAppPy">
+                            <span class="tab-icon">🐍</span> app.py
+                        </button>
+                        <button class="code-tab" data-file="speech_engine.py"
+                            onclick="loadSourceCode('speech_engine.py', this)" id="tabSpeechEngine">
+                            <span class="tab-icon">🔊</span> speech_engine.py
+                        </button>
+                        <button class="code-tab" data-file="database.py" onclick="loadSourceCode('database.py', this)"
+                            id="tabDatabase">
+                            <span class="tab-icon">🗄️</span> database.py
+                        </button>
+                        <button class="code-tab" data-file="index.html" onclick="loadSourceCode('index.html', this)"
+                            id="tabIndexHtml">
+                            <span class="tab-icon">🌐</span> index.html
+                        </button>
+                        <button class="code-tab" data-file="main.js" onclick="loadSourceCode('main.js', this)"
+                            id="tabMainJs">
+                            <span class="tab-icon">⚡</span> main.js
+                        </button>
+                        <button class="code-tab" data-file="style.css" onclick="loadSourceCode('style.css', this)"
+                            id="tabStyleCss">
+                            <span class="tab-icon">🎨</span> style.css
+                        </button>
+                    </div>
+                    <div class="code-viewer" id="codeViewer">
+                        <div class="code-header">
+                            <span class="code-filename" id="codeFilename">app.py</span>
+                            <span class="code-lines" id="codeLineCount">loading...</span>
+                        </div>
+                        <pre class="code-content" id="codeContent"><code>Loading source code...</code></pre>
+                    </div>
+                </div>
+
+                <!-- Continue Button -->
+                <div class="cta-section">
+                    <button class="btn-massive btn-glow" id="btnContinueToInput" onclick="showPage(3)">
+                        <span class="btn-icon">🎤</span>
+                        <span class="btn-text">Continue to Audio Input</span>
+                        <span class="btn-arrow">→</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════════════
+             PAGE 3: AUDIO INPUT (Upload/Record)
+             ════════════════════════════════════════════════════════════ -->
+        <section class="page" id="page3" data-page="3">
+            <div class="page-inner">
+                <div class="page-header">
+                    <h1 class="page-title">Audio Input</h1>
+                    <p class="page-description">Upload your audio file or select a synthetic test sample</p>
+                </div>
+
+                <!-- Upload Zone -->
+                <div class="upload-card glass-card" id="uploadCard">
+                    <div class="card-header">
+                        <span class="card-icon">📤</span>
+                        <h2>Upload Audio File</h2>
+                    </div>
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-zone-content">
+                            <div class="upload-icon-large">🎵</div>
+                            <h3 class="upload-title">Drag & Drop Audio File</h3>
+                            <p class="upload-subtitle">or click to browse</p>
+                            <p class="upload-formats">Supported: WAV, MP3, OGG, FLAC, M4A, WebM</p>
+                            <input type="file" id="fileInput" accept=".wav,.mp3,.ogg,.flac,.m4a,.webm,.aac" hidden>
+                        </div>
+                        <div class="upload-progress" id="uploadProgress" style="display: none;">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="uploadProgressFill"></div>
+                            </div>
+                            <span class="progress-text" id="uploadProgressText">Uploading...</span>
+                        </div>
+                    </div>
+                    <div class="upload-info" id="uploadFileInfo" style="display: none;">
+                        <span class="file-icon">✅</span>
+                        <span class="file-name" id="uploadFileName"></span>
+                        <span class="file-size" id="uploadFileSize"></span>
+                        <button class="btn-small btn-clear" id="btnClearUpload" onclick="clearUpload()">✕</button>
+                    </div>
+                </div>
+
+                <!-- OR Divider 1 -->
+                <div class="or-divider">
+                    <span class="or-line"></span>
+                    <span class="or-text">OR</span>
+                    <span class="or-line"></span>
+                </div>
+
+                <!-- Record Audio -->
+                <div class="recorder-card glass-card" id="recorderCard">
+                    <div class="card-header">
+                        <span class="card-icon">🎙️</span>
+                        <h2>Record Audio</h2>
+                    </div>
+                    <p class="recorder-description">Record directly from your microphone. Speak naturally and capture
+                        your voice for DSP analysis.</p>
+
+                    <div class="recorder-hub" id="recorderHub">
+                        <!-- Volume Meter -->
+                        <div class="volume-meter" id="volumeMeter">
+                            <div class="volume-label">VOL</div>
+                            <div class="volume-bar-track">
+                                <div class="volume-segment seg-10" data-seg="10"></div>
+                                <div class="volume-segment seg-9" data-seg="9"></div>
+                                <div class="volume-segment seg-8" data-seg="8"></div>
+                                <div class="volume-segment seg-7" data-seg="7"></div>
+                                <div class="volume-segment seg-6" data-seg="6"></div>
+                                <div class="volume-segment seg-5" data-seg="5"></div>
+                                <div class="volume-segment seg-4" data-seg="4"></div>
+                                <div class="volume-segment seg-3" data-seg="3"></div>
+                                <div class="volume-segment seg-2" data-seg="2"></div>
+                                <div class="volume-segment seg-1" data-seg="1"></div>
+                            </div>
+                        </div>
+
+                        <!-- Record Button -->
+                        <div class="record-btn-wrapper" id="recordBtnWrapper">
+                            <div class="record-ring record-ring-3" id="recordRing3"></div>
+                            <div class="record-ring record-ring-2" id="recordRing2"></div>
+                            <div class="record-ring record-ring-1" id="recordRing1"></div>
+                            <button class="record-btn" id="btnRecord" onclick="toggleRecording()">
+                                <span class="record-btn-inner" id="recordBtnInner">🎤</span>
+                            </button>
+                            <div class="recording-indicator" id="recordingIndicator" style="display: none;">
+                                <span class="rec-dot"></span>
+                                <span class="rec-label">REC</span>
+                            </div>
+                        </div>
+
+                        <!-- Timer -->
+                        <div class="recording-timer" id="recordingTimer">00:00</div>
+
+                        <!-- Live Waveform -->
+                        <div class="waveform-visualizer" id="waveformVisualizer">
+                            <canvas id="recorderCanvas" width="500" height="80"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Recorder Actions -->
+                    <div class="recorder-actions" id="recorderActions" style="display: none;">
+                        <button class="btn-recorder btn-recorder-discard" id="btnDiscardRecording"
+                            onclick="discardRecording()">
+                            <span>🗑️</span>
+                            <span>Discard</span>
+                        </button>
+                        <button class="btn-recorder btn-recorder-use" id="btnUseRecording" onclick="useRecording()">
+                            <span>✅</span>
+                            <span>Use Recording</span>
+                        </button>
+                    </div>
+
+                    <!-- Recorded File Info -->
+                    <div class="upload-info" id="recordedFileInfo" style="display: none;">
+                        <span class="file-icon">🎙️</span>
+                        <span class="file-name" id="recordedFileName">Recording</span>
+                        <span class="file-size" id="recordedFileSize"></span>
+                        <button class="btn-small btn-clear" id="btnClearRecording"
+                            onclick="discardRecording()">✕</button>
+                    </div>
+                </div>
+
+                <!-- OR Divider 2 -->
+                <div class="or-divider">
+                    <span class="or-line"></span>
+                    <span class="or-text">OR</span>
+                    <span class="or-line"></span>
+                </div>
+
+                <!-- Quick Test Samples -->
+                <div class="samples-card glass-card" id="samplesCard">
+                    <div class="card-header">
+                        <span class="card-icon">🧪</span>
+                        <h2>Quick-Test Samples</h2>
+                    </div>
+                    <p class="samples-description">
+                        Select a pre-configured synthetic audio sample with calibrated AWGN noise for demonstration
+                        purposes.
+                    </p>
+                    <div class="samples-grid" id="samplesGrid">
+                        <button class="sample-btn glass-card" data-key="cafe_noise" onclick="selectSample('cafe_noise')"
+                            id="sampleCafe">
+                            <span class="sample-icon">☕</span>
+                            <span class="sample-name">Cafe Noise</span>
+                            <span class="sample-detail">AWGN · SNR 5 dB</span>
+                        </button>
+                        <button class="sample-btn glass-card" data-key="traffic_noise"
+                            onclick="selectSample('traffic_noise')" id="sampleTraffic">
+                            <span class="sample-icon">🚗</span>
+                            <span class="sample-name">Traffic Noise</span>
+                            <span class="sample-detail">Heavy AWGN · SNR 0 dB</span>
+                        </button>
+                        <button class="sample-btn glass-card" data-key="office_hum" onclick="selectSample('office_hum')"
+                            id="sampleOffice">
+                            <span class="sample-icon">🏢</span>
+                            <span class="sample-name">Office Hum</span>
+                            <span class="sample-detail">Light AWGN · SNR 15 dB</span>
+                        </button>
+                        <button class="sample-btn glass-card" data-key="construction_noise"
+                            onclick="selectSample('construction_noise')" id="sampleConstruction">
+                            <span class="sample-icon">🏗️</span>
+                            <span class="sample-name">Construction Site</span>
+                            <span class="sample-detail">Extreme AWGN · SNR −5 dB</span>
+                        </button>
+                        <button class="sample-btn glass-card" data-key="clean_reference"
+                            onclick="selectSample('clean_reference')" id="sampleClean">
+                            <span class="sample-icon">✨</span>
+                            <span class="sample-name">Clean Reference</span>
+                            <span class="sample-detail">No Noise · Baseline</span>
+                        </button>
+                    </div>
+                    <div class="selected-sample" id="selectedSample" style="display: none;">
+                        <span class="selected-icon" id="selectedSampleIcon">☕</span>
+                        <span class="selected-name" id="selectedSampleName">Cafe Noise</span>
+                        <span class="selected-detail" id="selectedSampleDetail">AWGN · SNR 5 dB</span>
+                        <button class="btn-small btn-clear" onclick="clearSampleSelection()">✕</button>
+                    </div>
+                </div>
+
+                <!-- Start Processing Button -->
+                <div class="cta-section">
+                    <button class="btn-massive btn-glow btn-process" id="btnStartProcessing" onclick="startProcessing()"
+                        disabled>
+                        <span class="btn-icon">⚡</span>
+                        <span class="btn-text">Start Processing</span>
+                        <span class="btn-arrow">→</span>
+                    </button>
+                    <p class="cta-hint" id="ctaHint">Upload a file or select a sample to begin</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════════════
+             PAGE 4: PROCESSING (Loading State)
+             ════════════════════════════════════════════════════════════ -->
+        <section class="page" id="page4" data-page="4">
+            <div class="page-inner page-center">
+                <div class="processing-card glass-card" id="processingCard">
+                    <div class="processing-header">
+                        <div class="processing-spinner" id="processingSpinner">
+                            <div class="spinner-ring ring-1"></div>
+                            <div class="spinner-ring ring-2"></div>
+                            <div class="spinner-ring ring-3"></div>
+                            <div class="spinner-core">⚙️</div>
+                        </div>
+                        <h1 class="processing-title">Processing Signal</h1>
+                        <p class="processing-subtitle" id="processingSubtitle">Applying Digital Signal Processing
+                            pipeline...</p>
+                    </div>
+
+                    <div class="terminal" id="terminal">
+                        <div class="terminal-header">
+                            <div class="terminal-dots">
+                                <span class="dot dot-red"></span>
+                                <span class="dot dot-yellow"></span>
+                                <span class="dot dot-green"></span>
+                            </div>
+                            <span class="terminal-title">dsp_pipeline.exe</span>
+                        </div>
+                        <div class="terminal-body" id="terminalBody">
+                            <div class="terminal-line" id="terminalCursor">
+                                <span class="terminal-prompt">$</span>
+                                <span class="terminal-text cursor-blink">Initializing DSP pipeline...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="processing-progress">
+                        <div class="progress-bar-large">
+                            <div class="progress-fill-animated" id="processingProgressFill"></div>
+                        </div>
+                        <span class="progress-percentage" id="processingPercentage">0%</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════════════
+             PAGE 5: ANALYTICS & RESULTS DASHBOARD
+             ════════════════════════════════════════════════════════════ -->
+        <section class="page" id="page5" data-page="5">
+            <div class="page-inner">
+                <div class="page-header">
+                    <h1 class="page-title">Analytics Dashboard</h1>
+                    <p class="page-description">Signal analysis results, AI transcription, and audio comparison</p>
+                </div>
+
+                <!-- Waveform Chart -->
+                <div class="chart-card glass-card" id="chartCard">
+                    <div class="card-header">
+                        <span class="card-icon">📊</span>
+                        <h2>Visual Comparison: x(t) vs y(t)</h2>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="waveformChart" width="800" height="350"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item">
+                            <span class="legend-dot legend-input"></span>
+                            Input Signal x(t) — Noisy
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot legend-output"></span>
+                            Output Signal y(t) — Enhanced
+                        </span>
+                    </div>
+                    <div class="download-actions" id="chartDownloadActions">
+                        <button class="btn-download-sm glass-card" id="btnDownloadChart" onclick="downloadChartAsPNG()">
+                            <span class="btn-dl-icon">📊</span>
+                            <span>Download Chart as PNG</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Metrics Row -->
+                <div class="metrics-row" id="metricsRow">
+                    <!-- Input SNR Card -->
+                    <div class="metric-card glass-card" id="metricInputSnr">
+                        <div class="metric-icon">📉</div>
+                        <div class="metric-value" id="metricInputSnrValue">--</div>
+                        <div class="metric-label">Input SNR (dB)</div>
+                        <div class="metric-sublabel">x(t) — Noisy Signal</div>
+                    </div>
+                    <!-- Output SNR Card -->
+                    <div class="metric-card glass-card metric-highlight" id="metricOutputSnr">
+                        <div class="metric-icon">📈</div>
+                        <div class="metric-value" id="metricOutputSnrValue">--</div>
+                        <div class="metric-label">Output SNR (dB)</div>
+                        <div class="metric-sublabel">y(t) — Enhanced Signal</div>
+                    </div>
+                    <!-- MSE Card -->
+                    <div class="metric-card glass-card" id="metricMse">
+                        <div class="metric-icon">📏</div>
+                        <div class="metric-value" id="metricMseValue">--</div>
+                        <div class="metric-label">Mean Square Error</div>
+                        <div class="metric-sublabel">MSE between s(t) & y(t)</div>
+                    </div>
+                    <!-- SNR Improvement Card -->
+                    <div class="metric-card glass-card metric-gold" id="metricImprovement">
+                        <div class="metric-icon">🚀</div>
+                        <div class="metric-value" id="metricImprovementValue">--</div>
+                        <div class="metric-label">SNR Improvement</div>
+                        <div class="metric-sublabel">Enhancement Gain (dB)</div>
+                    </div>
+                </div>
+
+                <!-- AI Speech Extraction -->
+                <div class="transcription-card glass-card" id="transcriptionCard">
+                    <div class="card-header">
+                        <span class="card-icon">🗣️</span>
+                        <h2>AI Speech Extraction</h2>
+                    </div>
+                    <div class="transcription-grid">
+                        <!-- Input Transcription -->
+                        <div class="transcription-item" id="transcriptionInput">
+                            <h3 class="transcription-label">
+                                <span class="label-icon">🔴</span>
+                                Input Audio Text x(t)
+                            </h3>
+                            <div class="transcription-text" id="transcriptionInputText">
+                                Waiting for processing results...
+                            </div>
+                        </div>
+                        <!-- Output Transcription -->
+                        <div class="transcription-item" id="transcriptionOutput">
+                            <h3 class="transcription-label">
+                                <span class="label-icon">🟢</span>
+                                Output Audio Text y(t)
+                            </h3>
+                            <div class="transcription-text" id="transcriptionOutputText">
+                                Waiting for processing results...
+                            </div>
+                        </div>
+                        <!-- AI Summary -->
+                        <div class="transcription-item transcription-summary" id="transcriptionSummary">
+                            <h3 class="transcription-label">
+                                <span class="label-icon">🤖</span>
+                                AI Summary
+                            </h3>
+                            <div class="transcription-text summary-text" id="transcriptionSummaryText">
+                                Waiting for processing results...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- X-Ray Audio Toggle -->
+                <div class="audio-card glass-card" id="audioCard">
+                    <div class="card-header">
+                        <span class="card-icon">🎧</span>
+                        <h2>Interactive X-Ray Audio Toggle</h2>
+                    </div>
+                    <p class="audio-description">
+                        Compare the noisy input x(t) with the enhanced output y(t) in real-time. Toggle noise
+                        suppression while listening.
+                    </p>
+
+                    <div class="audio-player" id="audioPlayer">
+                        <!-- Play Button -->
+                        <button class="btn-play" id="btnPlay" onclick="togglePlayback()">
+                            <span class="play-icon" id="playIcon">▶</span>
+                        </button>
+
+                        <!-- Progress Bar -->
+                        <div class="audio-progress-wrapper" id="audioProgressWrapper">
+                            <div class="audio-progress-bar" id="audioProgressBar">
+                                <div class="audio-progress-fill" id="audioProgressFill"></div>
+                            </div>
+                            <div class="audio-time">
+                                <span id="audioCurrentTime">0:00</span>
+                                <span>/</span>
+                                <span id="audioDuration">0:00</span>
+                            </div>
+                        </div>
+
+                        <!-- Toggle Switch -->
+                        <div class="toggle-container" id="toggleContainer">
+                            <span class="toggle-label toggle-off-label" id="toggleOffLabel">Noise Suppression:
+                                OFF</span>
+                            <label class="toggle-switch" id="toggleSwitch">
+                                <input type="checkbox" id="noiseToggle" onchange="toggleNoiseSuppression()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="toggle-label toggle-on-label" id="toggleOnLabel">ON</span>
+                        </div>
+                    </div>
+
+                    <!-- Hidden Audio Elements -->
+                    <audio id="audioInput" preload="auto"></audio>
+                    <audio id="audioOutput" preload="auto"></audio>
+
+                    <div class="download-actions" id="audioDownloadActions">
+                        <button class="btn-download-sm glass-card" id="btnDownloadInputAudio"
+                            onclick="downloadAudioFile('input')">
+                            <span class="btn-dl-icon">🔴</span>
+                            <span>Download Noisy Audio</span>
+                        </button>
+                        <button class="btn-download-sm glass-card" id="btnDownloadOutputAudio"
+                            onclick="downloadAudioFile('output')">
+                            <span class="btn-dl-icon">🟢</span>
+                            <span>Download Enhanced Audio</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Download Report Button -->
+                <div class="cta-section">
+                    <button class="btn-massive btn-glow btn-download" id="btnDownloadReport" onclick="downloadReport()">
+                        <span class="btn-icon">📥</span>
+                        <span class="btn-text">Download Complete Results Data</span>
+                        <span class="btn-arrow">↓</span>
+                    </button>
+                    <button class="btn-secondary" id="btnNewSession" onclick="startNewSession()">
+                        <span class="btn-icon">🔄</span>
+                        <span>Start New Session</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         FOOTER
+         ════════════════════════════════════════════════════════════════ -->
+    <footer class="footer glass-card" id="footer">
+        <div class="footer-content">
+            <p class="footer-text">
+                © 2026 Complex Random Process Analysis — VIT Chennai
+            </p>
+            <p class="footer-team">
+                Navin Kumar PG · A.P. Anirudh · Kailash N H | Faculty Guide: Dr. Kalaivan K
+            </p>
+        </div>
+    </footer>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         NOTIFICATION TOAST
+         ════════════════════════════════════════════════════════════════ -->
+    <div class="toast-container" id="toastContainer">
+        <div class="toast glass-card" id="toast" style="display: none;">
+            <span class="toast-icon" id="toastIcon">ℹ️</span>
+            <span class="toast-message" id="toastMessage"></span>
+            <button class="toast-close" onclick="hideToast()">✕</button>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         JAVASCRIPT
+         ════════════════════════════════════════════════════════════════ -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>
