@@ -1,0 +1,33 @@
+# ═══════════════════════════════════════════════════════
+#  RP Project — .gitignore
+# ═══════════════════════════════════════════════════════
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+.env/
+
+# Database (auto-generated)
+instance/
+*.db
+
+# Upload & processed audio (runtime data)
+uploads/
+processed/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+.DS_Store
