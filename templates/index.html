@@ -686,6 +686,45 @@
                     </div>
                 </div>
 
+                <!-- ════════ LANGUAGE SELECTOR ════════ -->
+                <div class="lang-selector-card glass-card" id="langSelectorCard">
+                    <div class="card-header">
+                        <span class="card-icon">🌐</span>
+                        <h2>Select Language for AI Analysis</h2>
+                    </div>
+                    <p class="lang-selector-desc">Choose the language for Voice Recognition (ASR) input &amp; AI Summary output. Your audio will be transcribed and summarised in this language.</p>
+                    <div class="lang-selector" id="langSelector" role="group" aria-label="Language selection">
+                        <button class="lang-btn active" id="langBtnEn"
+                            onclick="selectLanguage('en-US')"
+                            data-lang="en-US"
+                            aria-pressed="true">
+                            <span class="lang-flag">🇬🇧</span>
+                            <span class="lang-name">English</span>
+                            <span class="lang-native">English</span>
+                        </button>
+                        <button class="lang-btn" id="langBtnHi"
+                            onclick="selectLanguage('hi-IN')"
+                            data-lang="hi-IN"
+                            aria-pressed="false">
+                            <span class="lang-flag">🇮🇳</span>
+                            <span class="lang-name">Hindi</span>
+                            <span class="lang-native">हिन्दी</span>
+                        </button>
+                        <button class="lang-btn" id="langBtnTa"
+                            onclick="selectLanguage('ta-IN')"
+                            data-lang="ta-IN"
+                            aria-pressed="false">
+                            <span class="lang-flag">🇮🇳</span>
+                            <span class="lang-name">Tamil</span>
+                            <span class="lang-native">தமிழ்</span>
+                        </button>
+                    </div>
+                    <div class="lang-selected-info" id="langSelectedInfo">
+                        <span class="lang-sel-dot"></span>
+                        <span id="langSelectedText">🇬🇧 English selected — ASR &amp; AI Summary will be in English</span>
+                    </div>
+                </div>
+
                 <!-- Start Processing Button -->
                 <div class="cta-section">
                     <button class="btn-massive btn-glow btn-process" id="btnStartProcessing" onclick="startProcessing()"
@@ -813,7 +852,37 @@
                     </div>
                 </div>
 
-                <!-- AI Speech Extraction -->
+                <!-- ══════════ PAGE 5 LANGUAGE RE-SELECTOR ══════════ -->
+                <div class="lang-results-panel glass-card" id="langResultsPanel">
+                    <div class="lang-results-header">
+                        <span class="lang-results-icon">🌐</span>
+                        <span class="lang-results-title">Switch Analysis Language</span>
+                        <span class="lang-results-hint">Re-generate AI Summary instantly — no reprocessing needed</span>
+                    </div>
+                    <div class="lang-results-btns" id="langResultsBtns">
+                        <button class="lang-results-btn active" id="resBtnEn"
+                            onclick="switchResultsLanguage('en-US')"
+                            data-lang="en-US">
+                            <span>🇬🇧</span> <span>EN</span> <span class="lang-rn">English</span>
+                        </button>
+                        <button class="lang-results-btn" id="resBtnHi"
+                            onclick="switchResultsLanguage('hi-IN')"
+                            data-lang="hi-IN">
+                            <span>🇮🇳</span> <span>HI</span> <span class="lang-rn">हिन्दी</span>
+                        </button>
+                        <button class="lang-results-btn" id="resBtnTa"
+                            onclick="switchResultsLanguage('ta-IN')"
+                            data-lang="ta-IN">
+                            <span>🇮🇳</span> <span>TA</span> <span class="lang-rn">தமிழ்</span>
+                        </button>
+                    </div>
+                    <div class="lang-results-status" id="langResultsStatus" style="display:none;">
+                        <span class="lang-status-spinner"></span>
+                        <span id="langResultsStatusText">Regenerating summary…</span>
+                    </div>
+                </div>
+
+                <!-- AI Speech Extraction -->\n
                 <div class="transcription-card glass-card" id="transcriptionCard">
                     <div class="card-header">
                         <span class="card-icon">🗣️</span>
@@ -845,9 +914,22 @@
                             <h3 class="transcription-label">
                                 <span class="label-icon">🤖</span>
                                 AI Summary
+                                <span class="lang-badge" id="summaryLangBadge" title="Analysis language">EN</span>
                             </h3>
                             <div class="transcription-text summary-text" id="transcriptionSummaryText">
                                 Waiting for processing results...
+                            </div>
+                            <!-- TTS Button -->
+                            <div class="tts-actions" id="ttsActions" style="display:none;">
+                                <button class="tts-btn" id="btnSpeakSummary" onclick="speakSummary()" title="Listen to AI Summary">
+                                    <span class="tts-icon" id="ttsIcon">🔊</span>
+                                    <span class="tts-label" id="ttsLabel">Listen to Summary</span>
+                                    <span class="tts-pulse" id="ttsPulse"></span>
+                                </button>
+                                <button class="tts-btn tts-btn-stop" id="btnStopSpeech" onclick="stopSpeech()" style="display:none;" title="Stop speaking">
+                                    <span class="tts-icon">⏹️</span>
+                                    <span class="tts-label">Stop</span>
+                                </button>
                             </div>
                         </div>
                     </div>

@@ -101,6 +101,18 @@ const AppState = {
         timerInterval: null,
         recordedBlob: null,
     },
+
+    /**
+     * Selected language for ASR + AI Summarisation.
+     * One of: "en-US" (English), "hi-IN" (Hindi), "ta-IN" (Tamil)
+     */
+    selectedLanguage: "en-US",
+
+    /** TTS (Text-to-Speech) currently speaking */
+    tts: {
+        utterance: null,
+        isSpeaking: false,
+    },
 };
 
 
@@ -771,13 +783,15 @@ function generateAndProcess(sampleKey) {
  * @param {string} sessionId - The session UUID to process.
  */
 function processSession(sessionId) {
-    console.log("[Process] Processing session:", sessionId);
+    console.log("[Process] Processing session:", sessionId, "| Language:", AppState.selectedLanguage);
 
     addTerminalLine("Initiating DSP processing pipeline...", "text-gold");
+    addTerminalLine("Language: " + AppState.selectedLanguage, "text-gold");
 
     fetch("/api/process/" + sessionId, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: AppState.selectedLanguage }),
     })
     .then(function (response) { return response.json(); })
     .then(function (data) {
@@ -1011,6 +1025,13 @@ function renderDashboard(results) {
         return;
     }
 
+    // Sync Page 5 language selector to the language used for processing
+    var langUsed = results.language || AppState.selectedLanguage || "en-US";
+    var resBtns = document.querySelectorAll(".lang-results-btn");
+    resBtns.forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-lang") === langUsed);
+    });
+
     // ── Render Metrics Cards ─────────────────────────────────────────
     renderMetrics(results);
 
@@ -1233,6 +1254,15 @@ function renderTranscriptions(results) {
     var outputText = results.output_text || "[No transcription available]";
     var aiSummary = results.ai_summary || "[No summary available]";
 
+    // ── Language badge ────────────────────────────────────────────
+    var langBadge = document.getElementById("summaryLangBadge");
+    var langUsed = results.language || AppState.selectedLanguage || "en-US";
+    var langLabels = { "en-US": "EN", "hi-IN": "HI", "ta-IN": "TA" };
+    if (langBadge) {
+        langBadge.textContent = langLabels[langUsed] || langUsed.split("-")[0].toUpperCase();
+        langBadge.title = "Analysis language: " + langUsed;
+    }
+
     // Typewriter effect for each text
     if (inputTextEl) {
         typewriterEffect(inputTextEl, inputText, 15);
@@ -1247,30 +1277,70 @@ function renderTranscriptions(results) {
     if (summaryTextEl) {
         setTimeout(function () {
             typewriterEffect(summaryTextEl, aiSummary, 20);
+
+            // Show TTS actions after summary is set
+            setTimeout(function () {
+                var ttsActions = document.getElementById("ttsActions");
+                if (ttsActions && aiSummary && !aiSummary.startsWith("[")) {
+                    ttsActions.style.display = "flex";
+                    // Store summary text for TTS access
+                    AppState.tts.currentSummary = aiSummary;
+                    AppState.tts.currentLang = langUsed;
+                }
+            }, aiSummary.length * 20 + 500);
+
         }, 1000);
     }
 }
 
 
 /**
+ * Active typewriter intervals keyed by element reference.
+ * Prevents concurrent intervals running on the same element (causes doubled-char bug).
+ * @type {Map<HTMLElement, number>}
+ */
+var _twIntervals = new Map();
+
+/**
  * Apply a typewriter effect to an element.
+ * Safe against concurrent calls — automatically cancels any prior interval
+ * on the same element before starting a new one.
  *
  * @param {HTMLElement} element - The target element.
- * @param {string} text - The full text to type.
- * @param {number} speed - Milliseconds per character.
+ * @param {string} text        - The full text to type out.
+ * @param {number} speed       - Milliseconds per character.
  */
 function typewriterEffect(element, text, speed) {
+    if (!element || text === undefined || text === null) return;
+
+    // Cancel any running typewriter on this same element
+    if (_twIntervals.has(element)) {
+        clearInterval(_twIntervals.get(element));
+        _twIntervals.delete(element);
+    }
+
+    // For fallback / error messages (start with '[') — show immediately, no animation
+    if (typeof text === 'string' && text.trimStart().charAt(0) === '[') {
+        element.textContent = text;
+        return;
+    }
+
+    // Reset content and start fresh
     element.textContent = "";
     var index = 0;
 
     var interval = setInterval(function () {
         if (index < text.length) {
-            element.textContent += text.charAt(index);
+            // Append next character only (never re-read textContent from DOM)
+            element.textContent = text.substring(0, index + 1);
             index++;
         } else {
             clearInterval(interval);
+            _twIntervals.delete(element);
         }
     }, speed);
+
+    _twIntervals.set(element, interval);
 }
 
 
@@ -2967,6 +3037,252 @@ function drawDataGrid(ctx, w, h, t) {
         ctx.fillStyle = "rgba(251,113,133," + (0.04 + j * 0.01) + ")";
         ctx.fillRect(bx, h - bh - 40, barW, bh);
     }
+}
+
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SECTION 17 — MULTILINGUAL SUPPORT (Language Selector + TTS)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Language display metadata (mirrors LANGUAGE_CODES in speech_engine.py).
+ * @const {Object}
+ */
+var LANG_INFO = {
+    "en-US": { flag: "🇬🇧", name: "English",  native: "English",  short: "EN" },
+    "hi-IN": { flag: "🇮🇳", name: "Hindi",    native: "हिन्दी", short: "HI" },
+    "ta-IN": { flag: "🇮🇳", name: "Tamil",    native: "தமிழ்",  short: "TA" },
+};
+
+/**
+ * Select a language for AI Analysis (ASR + Summarisation).
+ * Updates the UI toggle and AppState.
+ *
+ * @param {string} langCode - BCP-47 language code: "en-US", "hi-IN", or "ta-IN".
+ */
+function selectLanguage(langCode) {
+    var allowed = ["en-US", "hi-IN", "ta-IN"];
+    if (allowed.indexOf(langCode) === -1) {
+        console.warn("[Lang] Unknown language code:", langCode);
+        return;
+    }
+
+    // Update state
+    AppState.selectedLanguage = langCode;
+
+    // Update button active states
+    var allBtns = document.querySelectorAll(".lang-btn");
+    allBtns.forEach(function (btn) {
+        var isActive = btn.getAttribute("data-lang") === langCode;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+
+    // Update the info bar
+    var info = LANG_INFO[langCode] || { flag: "🌐", name: langCode, native: langCode };
+    var infoEl = document.getElementById("langSelectedText");
+    if (infoEl) {
+        infoEl.textContent =
+            info.flag + " " + info.name + " (" + info.native + ")" +
+            " selected — ASR & AI Summary will be in " + info.name;
+    }
+
+    console.log("[Lang] Selected language:", langCode, "—", info.name);
+    showToast("🌐", "Language set to " + info.flag + " " + info.name + " (" + info.native + ")");
+}
+
+
+/**
+ * Speak the AI summary aloud using the browser's SpeechSynthesis API.
+ * Uses the language selected by the user for correct voice selection.
+ */
+function speakSummary() {
+    if (!window.speechSynthesis) {
+        showToast("⚠️", "Text-to-Speech is not supported in this browser.");
+        return;
+    }
+
+    // Get the summary text from the div directly (most up-to-date)
+    var summaryEl = document.getElementById("transcriptionSummaryText");
+    var text = (summaryEl ? summaryEl.textContent : "") ||
+               (AppState.tts && AppState.tts.currentSummary) || "";
+
+    if (!text || text.startsWith("[")) {
+        showToast("⚠️", "No summary text available to speak.");
+        return;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    var lang = (AppState.tts && AppState.tts.currentLang) ||
+               AppState.selectedLanguage || "en-US";
+
+    var utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    // Try to select a matching voice
+    var voices = window.speechSynthesis.getVoices();
+    var preferredVoice = voices.find(function (v) {
+        return v.lang === lang || v.lang.startsWith(lang.split("-")[0]);
+    });
+    if (preferredVoice) {
+        utterance.voice = preferredVoice;
+    }
+
+    // UI feedback — speaking state
+    utterance.onstart = function () {
+        AppState.tts.isSpeaking = true;
+        var btn = document.getElementById("btnSpeakSummary");
+        var stopBtn = document.getElementById("btnStopSpeech");
+        var icon = document.getElementById("ttsIcon");
+        var label = document.getElementById("ttsLabel");
+        if (btn)  btn.classList.add("speaking");
+        if (stopBtn) stopBtn.style.display = "inline-flex";
+        if (icon)  icon.textContent = "🔊";
+        if (label) label.textContent = "Speaking…";
+    };
+
+    utterance.onend = function () {
+        _resetTtsUi();
+    };
+
+    utterance.onerror = function (e) {
+        console.error("[TTS] SpeechSynthesis error:", e.error);
+        _resetTtsUi();
+        if (e.error !== "canceled") {
+            showToast("⚠️", "TTS error: " + e.error);
+        }
+    };
+
+    AppState.tts.utterance = utterance;
+    window.speechSynthesis.speak(utterance);
+
+    var langInfo = LANG_INFO[lang] || { flag: "🔊", name: lang };
+    showToast("🔊", "Speaking in " + langInfo.flag + " " + langInfo.name + "…");
+}
+
+
+/**
+ * Stop any ongoing TTS playback.
+ */
+function stopSpeech() {
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
+    _resetTtsUi();
+}
+
+
+/**
+ * Internal helper — reset TTS button UI to idle state.
+ * @private
+ */
+function _resetTtsUi() {
+    AppState.tts.isSpeaking = false;
+    var btn = document.getElementById("btnSpeakSummary");
+    var stopBtn = document.getElementById("btnStopSpeech");
+    var icon = document.getElementById("ttsIcon");
+    var label = document.getElementById("ttsLabel");
+    if (btn)  btn.classList.remove("speaking");
+    if (stopBtn) stopBtn.style.display = "none";
+    if (icon)  icon.textContent = "🔊";
+    if (label) label.textContent = "Listen to Summary";
+}
+
+
+
+/**
+ * Switch the AI Summary language on Page 5 after results have loaded.
+ * Calls /api/re-summarize for an instant, server-side re-generation.
+ *
+ * @param {string} langCode - BCP-47 target language code.
+ */
+function switchResultsLanguage(langCode) {
+    var sessionId = AppState.sessionId;
+    if (!sessionId) {
+        showToast("⚠️", "No active session — please process audio first.");
+        return;
+    }
+
+    var allowed = ["en-US", "hi-IN", "ta-IN"];
+    if (allowed.indexOf(langCode) === -1) return;
+
+    // Update Page 5 button active state immediately
+    var resBtns = document.querySelectorAll(".lang-results-btn");
+    resBtns.forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-lang") === langCode);
+    });
+
+    // Also sync the TTS language
+    AppState.selectedLanguage = langCode;
+    if (AppState.tts) AppState.tts.currentLang = langCode;
+
+    // Show loading status
+    var statusEl = document.getElementById("langResultsStatus");
+    var statusText = document.getElementById("langResultsStatusText");
+    if (statusEl) statusEl.style.display = "flex";
+    if (statusText) statusText.textContent = "Regenerating AI Summary in " + (LANG_INFO[langCode] ? LANG_INFO[langCode].name : langCode) + "…";
+
+    // Call the fast re-summarize endpoint
+    fetch("/api/re-summarize/" + sessionId, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: langCode }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        if (statusEl) statusEl.style.display = "none";
+
+        if (data.success === false) {
+            showToast("❌", "Re-summarisation failed: " + (data.message || "unknown error"));
+            return;
+        }
+
+        var newSummary = (data.data && data.data.ai_summary) ? data.data.ai_summary : data.ai_summary || "";
+        var elapsed   = (data.data && data.data.elapsed_seconds) ? data.data.elapsed_seconds : "";
+
+        // Typewriter-reveal the new summary
+        var summaryEl = document.getElementById("transcriptionSummaryText");
+        if (summaryEl && newSummary) {
+            typewriterEffect(summaryEl, newSummary, 18);
+        }
+
+        // Update language badge
+        var langLabels = { "en-US": "EN", "hi-IN": "HI", "ta-IN": "TA" };
+        var badge = document.getElementById("summaryLangBadge");
+        if (badge) {
+            badge.textContent = langLabels[langCode] || langCode;
+            badge.title = "Analysis language: " + langCode;
+        }
+
+        // Update TTS state
+        if (AppState.tts) {
+            AppState.tts.currentSummary = newSummary;
+            AppState.tts.currentLang    = langCode;
+        }
+
+        // Show TTS button if we have a real summary
+        if (newSummary && !newSummary.startsWith("[")) {
+            var ttsActions = document.getElementById("ttsActions");
+            if (ttsActions) ttsActions.style.display = "flex";
+        }
+
+        var info = LANG_INFO[langCode] || { flag: "🌐", name: langCode };
+        var elapsedStr = elapsed ? " (" + elapsed + "s)" : "";
+        showToast("✨", "AI Summary regenerated in " + info.flag + " " + info.name + elapsedStr);
+        console.log("[Lang] Re-summarised in", langCode, "|", elapsed, "s");
+    })
+    .catch(function (err) {
+        if (statusEl) statusEl.style.display = "none";
+        console.error("[Lang] Re-summarise error:", err);
+        showToast("❌", "Network error during re-summarisation.");
+    });
 }
 
 
