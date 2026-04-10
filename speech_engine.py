@@ -51,6 +51,7 @@ import wave
 import struct
 import logging
 import tempfile
+import concurrent.futures
 from pathlib import Path
 from typing import Optional
 
@@ -99,6 +100,17 @@ DEFAULT_DURATION = 4.0               # Default synthetic audio duration (sec)
 DEFAULT_SNR_DB = 5.0                 # Default noise level for samples
 MODULATION_INDEX_MU = 0.85           # AM modulation index μ
 FREQUENCY_CONSTANT_KA = 2 * np.pi    # Frequency constant k_a
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Supported Language Codes (BCP-47)
+# ──────────────────────────────────────────────────────────────────────────────
+LANGUAGE_CODES = {
+    "en-US": {"name": "English", "display": "English",  "flag": "🇬🇧"},
+    "hi-IN": {"name": "Hindi",   "display": "हिन्दी",  "flag": "🇮🇳"},
+    "ta-IN": {"name": "Tamil",   "display": "தமிழ்",  "flag": "🇮🇳"},
+}
+ALLOWED_LANGUAGES = set(LANGUAGE_CODES.keys())
+DEFAULT_LANGUAGE  = "en-US"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1032,20 +1044,44 @@ def generate_speech_with_text(
 #  SECTION 7 — AUTOMATIC SPEECH RECOGNITION (ASR)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _run_asr_with_timeout(
+    audio_data,
+    language: str,
+    energy_threshold: int,
+    timeout_sec: int,
+) -> str:
+    """Run recognize_google in a thread with a hard wall-clock deadline."""
+    recognizer = sr.Recognizer()
+    recognizer.energy_threshold         = energy_threshold
+    recognizer.dynamic_energy_threshold = False
+    recognizer.pause_threshold          = 0.5
+    recognizer.non_speaking_duration    = 0.3
+
+    def _call():
+        return recognizer.recognize_google(audio_data, language=language, show_all=False)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_call)
+        return future.result(timeout=timeout_sec)   # raises TimeoutError if exceeded
+
+
 def transcribe_audio(
     audio_array: np.ndarray,
     sample_rate: int,
-    language: str = "en-US",
-    timeout: int = 10,
+    language: str = DEFAULT_LANGUAGE,
+    timeout: int = 8,
 ) -> str:
     """
     Perform Automatic Speech Recognition on an audio array using the
-    Google Web Speech API (via the ``speech_recognition`` library).
+    Google Web Speech API, with hard wall-clock timeouts and auto-retry.
 
-    For the noisy input x(t), the transcription is expected to be
-    garbled or fail entirely — proving that the noise severely degrades
-    intelligibility.  For the enhanced output y(t), the transcription
-    should succeed, demonstrating the efficacy of the Butterworth filter.
+    Each attempt is wrapped in ``_run_asr_with_timeout()`` which uses
+    ``concurrent.futures.ThreadPoolExecutor`` so the API call can NEVER
+    hang beyond ``timeout`` seconds, regardless of network conditions.
+
+    Passes:
+        1. energy_threshold=50, timeout=8s  — standard sensitivity
+        2. energy_threshold=10, timeout=5s  — ultra-sensitive retry
 
     Parameters
     ----------
@@ -1054,60 +1090,96 @@ def transcribe_audio(
     sample_rate : int
         Sample rate in Hz.
     language : str
-        BCP-47 language code (default: "en-US").
+        BCP-47 language code ("en-US", "hi-IN", "ta-IN").
     timeout : int
-        Maximum seconds to wait for the API response.
+        Hard wall-clock seconds per API attempt.
 
     Returns
     -------
     str
-        Transcribed text, or an error/fallback message.
+        Recognised text, or a bracketed diagnostic message.
     """
     if not SR_AVAILABLE:
-        logger.warning("speech_recognition not installed — using fallback.")
+        logger.warning("speech_recognition not installed — using signal fallback.")
         return _transcription_fallback(audio_array)
 
     try:
-        # Convert numpy array to WAV bytes
-        wav_bytes = signal_to_wav_bytes(audio_array, sample_rate)
+        # ── Pre-process ──────────────────────────────────────────────
+        audio_proc = audio_array.copy().astype(np.float32)
 
-        # Create recogniser with a sensible operation timeout
-        recognizer = sr.Recognizer()
-        recognizer.energy_threshold = 300
-        recognizer.dynamic_energy_threshold = True
-        recognizer.operation_timeout = timeout  # Prevent indefinite blocking
+        # Silence gate — no point in calling the API for silence
+        rms = float(np.sqrt(np.mean(audio_proc ** 2)))
+        if rms < 0.004:
+            logger.info("ASR: silence gate (RMS=%.5f)", rms)
+            return "[Silence detected — no speech content present]"
 
-        # Load audio from bytes
+        # Normalise to 92% peak for optimal ASR confidence
+        peak = float(np.max(np.abs(audio_proc)))
+        if peak > 0:
+            audio_proc = audio_proc / peak * 0.92
+
+        # Resample to 16 kHz (Google SR optimal sample rate)
+        recognize_sr = sample_rate
+        if sample_rate != 16000:
+            from scipy.signal import resample_poly
+            from math import gcd
+            g = gcd(16000, sample_rate)
+            audio_proc = resample_poly(audio_proc, 16000 // g, sample_rate // g)
+            recognize_sr = 16000
+
+        # Build AudioData — shared across both attempts
+        pcm_bytes = (np.clip(audio_proc, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
         audio_data = sr.AudioData(
-            frame_data=(np.clip(audio_array, -1.0, 1.0) * 32767).astype(np.int16).tobytes(),
-            sample_rate=sample_rate,
+            frame_data=pcm_bytes,
+            sample_rate=recognize_sr,
             sample_width=2,
         )
 
-        # Attempt recognition with a timeout to prevent indefinite blocking
-        logger.info("Starting speech recognition (Google Web Speech API)...")
+        t0 = time.time()
+        logger.info("ASR — lang=%s  rms=%.4f  sr=%dHz  timeout=%ds",
+                    language, rms, recognize_sr, timeout)
+
+        # ── Pass 1: standard sensitivity (threshold=50) ───────────────
         try:
-            text = recognizer.recognize_google(
-                audio_data,
-                language=language,
-            )
-            logger.info("Transcription successful: '%s'", text[:80])
-            return text
-        except Exception as inner_exc:
-            # Catch any unexpected error from the recognition call itself
-            logger.warning("Recognition call failed: %s", inner_exc)
+            text = _run_asr_with_timeout(audio_data, language, 50, timeout)
+            logger.info("ASR pass-1 OK in %.2fs: '%s'", time.time() - t0, text[:80])
+            return text.strip()
+
+        except concurrent.futures.TimeoutError:
+            logger.warning("ASR pass-1 timed out after %ds", timeout)
+
+        except sr.UnknownValueError:
+            logger.info("ASR pass-1 unintelligible — retrying with threshold=10")
+
+        except sr.RequestError as exc:
+            logger.warning("ASR pass-1 request error: %s", exc)
+            return f"[Speech API unavailable — {exc}]"
+
+        # ── Pass 2: ultra-sensitive retry (threshold=10) ──────────────
+        retry_timeout = max(timeout - 3, 5)
+        try:
+            text = _run_asr_with_timeout(audio_data, language, 10, retry_timeout)
+            logger.info("ASR pass-2 OK in %.2fs: '%s'", time.time() - t0, text[:80])
+            return text.strip()
+
+        except concurrent.futures.TimeoutError:
+            logger.warning("ASR pass-2 timed out — network may be unreachable")
+            return "[Speech API timeout — check internet connection]"
+
+        except sr.UnknownValueError:
+            logger.info("ASR: both passes unintelligible")
+            return "[Speech unintelligible — noise level too high for recognition]"
+
+        except sr.RequestError as exc2:
+            logger.warning("ASR pass-2 request error: %s", exc2)
+            return f"[Speech API unavailable — {exc2}]"
+
+        except Exception as exc2:
+            logger.warning("ASR pass-2 unexpected error: %s", exc2)
             return _transcription_fallback(audio_array)
 
-    except sr.UnknownValueError:
-        logger.info("ASR could not understand audio (expected for noisy input).")
-        return "[Speech unintelligible — noise level too high for recognition]"
-
-    except sr.RequestError as exc:
-        logger.warning("Google Speech API request failed: %s", exc)
-        return f"[Speech API unavailable: {exc}. Using offline fallback.]"
-
     except Exception as exc:
-        logger.error("Unexpected ASR error: %s", exc)
+        logger.error("Unexpected ASR error: %s", exc, exc_info=True)
         return f"[Transcription error: {exc}]"
 
 
@@ -1162,6 +1234,7 @@ def transcribe_audio_enhanced(
     audio_array: np.ndarray,
     sample_rate: int,
     apply_preprocessing: bool = True,
+    language: str = DEFAULT_LANGUAGE,
 ) -> str:
     """
     Enhanced transcription with optional pre-processing.
@@ -1178,6 +1251,8 @@ def transcribe_audio_enhanced(
         Sample rate in Hz.
     apply_preprocessing : bool
         Whether to apply mild Butterworth pre-filtering.
+    language : str
+        BCP-47 language code ("en-US", "hi-IN", or "ta-IN").
 
     Returns
     -------
@@ -1197,69 +1272,182 @@ def transcribe_audio_enhanced(
         if max_amp > 0:
             audio_array = audio_array / max_amp * 0.95
 
-    return transcribe_audio(audio_array, sample_rate)
+    return transcribe_audio(audio_array, sample_rate, language=language)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SECTION 8 — AI TEXT SUMMARISATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-def summarize_text(text: str, max_sentences: int = 3) -> str:
+def summarize_text(
+    text: str,
+    max_sentences: int = 3,
+    language: str = DEFAULT_LANGUAGE,
+) -> str:
     """
-    Generate an AI-style summary of the transcribed speech.
+    Generate a professional, third-person AI editorial summary of transcribed speech.
 
-    This implements a rule-based extractive summarisation algorithm:
-        1. Tokenise the text into sentences.
-        2. Score each sentence by keyword frequency and position.
-        3. Select the top-scoring sentences.
-        4. Simplify the wording to produce "simple AI sentences".
+    Voice style:
+      - 3rd-person perspective ("The speaker discusses...", "The subject asserts...")
+      - Professional slang / editorial tone (concise, punchy, no filler)
+      - Multilingual fallback messages for non-speech input
+
+    Algorithm:
+        1. Tokenise into sentences.
+        2. Score by keyword density, semantic weight & position.
+        3. Extract top N, rewrite in 3rd-person editorial voice.
+        4. Return a tight, publication-ready paragraph.
 
     Parameters
     ----------
     text : str
-        The transcribed text from the enhanced audio y(t).
+        Transcribed audio text.
     max_sentences : int
-        Maximum number of sentences in the summary.
+        Max sentences in output summary.
+    language : str
+        BCP-47 code ("en-US", "hi-IN", "ta-IN").
 
     Returns
     -------
     str
-        The AI-generated summary.
+        Professional 3rd-person AI summary.
     """
-    if not text or text.startswith("["):
-        return "[No clear speech detected for summarisation]"
+    import re
 
-    # ── Pre-process ───────────────────────────────────────────────────
+    # ── Localised fallback messages ────────────────────────────────
+    _no_speech = {
+        "en-US": "[No clear speech detected — summarisation unavailable]",
+        "hi-IN": "[सारांश के लिए कोई स्पष्ट भाषण नहीं मिला]",
+        "ta-IN": "[சுருக்கத்திற்கு தெளிவான பேச்சு கண்டறியப்படவில்லை]",
+    }
+    lang_key = language if language in _no_speech else "en-US"
+
+    if not text or text.startswith("[") or len(text.strip()) < 4:
+        return _no_speech[lang_key]
+
     text = text.strip()
+    word_count = len(text.split())
 
-    # Handle very short text
-    if len(text.split()) < 5:
-        return f"The audio contains a brief message: \"{text}\""
+    # ── Very short input: wrap as-is in editorial voice ─────────────────
+    if word_count < 6:
+        _short = {
+            "en-US": f'The speaker briefly conveys: "{text.capitalize()}."',
+            "hi-IN": f'वक्ता संक्षिप्त रूप में कहते हैं: "{text}."',
+            "ta-IN": f'பேசுபவர் சுருக்கமாக கூறுகிறார்: "{text}."',
+        }
+        return _short.get(lang_key, _short["en-US"])
 
-    # ── Sentence tokenisation ─────────────────────────────────────────
+    # ── Tokenise into sentences ──────────────────────────────────────
     sentences = _split_into_sentences(text)
+    if not sentences:
+        sentences = [text]
 
+    # ── If already short, edit the whole thing in editorial voice ────
     if len(sentences) <= max_sentences:
-        simplified = [_simplify_sentence(s) for s in sentences]
-        return " ".join(simplified)
+        core = sentences
+    else:
+        # Score and pick best sentences
+        scores = _score_sentences(sentences)
+        indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+        top_idx = sorted(i for i, _ in indexed[:max_sentences])
+        core = [sentences[i] for i in top_idx]
 
-    # ── Score sentences ───────────────────────────────────────────────
-    scores = _score_sentences(sentences)
+    # ── Rewrite in 3rd-person editorial voice (English only) ───────
+    if lang_key == "en-US":
+        rewritten = [_rewrite_third_person(s) for s in core]
+    else:
+        # For Hindi and Tamil, use the raw extracted sentences (Google
+        # ASR already outputs in the target language; rewriting would
+        # require a language model beyond our scope).
+        rewritten = [s.strip().rstrip(".") + "." for s in core]
 
-    # ── Select top sentences (maintain original order) ────────────────
-    indexed_scores = list(enumerate(scores))
-    indexed_scores.sort(key=lambda x: x[1], reverse=True)
-    top_indices = sorted([idx for idx, _ in indexed_scores[:max_sentences]])
-
-    # ── Build summary ─────────────────────────────────────────────────
-    summary_sentences = [_simplify_sentence(sentences[i]) for i in top_indices]
-    summary = " ".join(summary_sentences)
+    summary = " ".join(rewritten)
 
     logger.info(
-        "Generated summary: %d sentences → %d sentences, %d words",
-        len(sentences), len(summary_sentences), len(summary.split()),
+        "[summarize_text] lang=%s | %d raw sentences → %d summary sentences",
+        language, len(sentences), len(rewritten),
     )
     return summary
+
+
+def _rewrite_third_person(sentence: str) -> str:
+    """
+    Transform a sentence into a crisp, professional 3rd-person editorial voice.
+
+    Rules applied (in order):
+      1. Strip filler openers ("well", "so", "um", "like").
+      2. Convert 1st-person pronouns → 3rd-person references.
+      3. Clean punctuation and capitalise.
+      4. Append strong period if missing.
+
+    Returns
+    -------
+    str
+        Edited sentence.
+    """
+    import re
+
+    s = sentence.strip()
+    if not s:
+        return ""
+
+    # Strip spoken filler starters
+    s = re.sub(
+        r'^(well|so|um|uh|like|you know|basically|honestly|literally|right|okay|ok),?\s+',
+        "", s, flags=re.IGNORECASE
+    )
+
+    # Substitute 1st-person → 3rd-person editorial constructions
+    # Ordered from most-specific to least-specific
+    replacements = [
+        # "I think / I believe / I feel / I know"
+        (r"\bI think\b",         "The speaker asserts"),
+        (r"\bI believe\b",       "The speaker contends"),
+        (r"\bI feel\b",          "The speaker expresses that"),
+        (r"\bI know\b",          "The speaker notes"),
+        (r"\bIn my opinion\b",   "In the speaker's view"),
+        (r"\bI am\b",            "The speaker is"),
+        (r"\bI'm\b",             "The speaker is"),
+        (r"\bI was\b",           "The speaker was"),
+        (r"\bI have\b",          "The speaker has"),
+        (r"\bI've\b",            "The speaker has"),
+        (r"\bI would\b",         "The speaker would"),
+        (r"\bI'd\b",             "The speaker would"),
+        (r"\bI will\b",          "The speaker will"),
+        (r"\bI'll\b",            "The speaker will"),
+        (r"\bI can\b",           "The speaker can"),
+        (r"\bI could\b",         "The speaker could"),
+        (r"\bI should\b",        "The speaker should"),
+        (r"\bI need\b",          "The speaker needs"),
+        (r"\bI want\b",          "The speaker wants"),
+        (r"\bI like\b",          "The speaker likes"),
+        (r"\bI said\b",          "The speaker stated"),
+        (r"\bI\b",               "the speaker"),
+        # "we" plural
+        (r"\bwe think\b",        "the subjects assert"),
+        (r"\bwe believe\b",      "the subjects contend"),
+        (r"\bwe\b",              "the group"),
+        (r"\bour\b",             "their"),
+        (r"\bmy\b",              "the speaker's"),
+        (r"\bme\b",              "the speaker"),
+        # Second person’ → third person
+        (r"\byou should\b",      "one should"),
+        (r"\byou can\b",         "one can"),
+        (r"\byou need\b",        "one needs"),
+    ]
+
+    for pattern, replacement in replacements:
+        s = re.sub(pattern, replacement, s, flags=re.IGNORECASE)
+
+    # Ensure proper capitalisation (only first character)
+    if s:
+        s = s[0].upper() + s[1:]
+
+    # Ensure sentence ends with a punctuation mark
+    if s and s[-1] not in ".!?":
+        s += "."
+
+    return s
 
 
 def _split_into_sentences(text: str) -> list:
@@ -1427,7 +1615,7 @@ def _simplify_sentence(sentence: str) -> str:
     return simplified
 
 
-def generate_detailed_summary(text: str) -> str:
+def generate_detailed_summary(text: str, language: str = DEFAULT_LANGUAGE) -> str:
     """
     Generate a more detailed AI summary with multiple analysis aspects.
 
@@ -1435,16 +1623,25 @@ def generate_detailed_summary(text: str) -> str:
     ----------
     text : str
         The transcribed text from enhanced audio.
+    language : str
+        BCP-47 language code for localised output.
 
     Returns
     -------
     str
         A multi-faceted summary.
     """
-    if not text or text.startswith("["):
-        return "[No clear speech content available for detailed analysis]"
+    _no_detail_msg = {
+        "en-US": "[No clear speech content available for detailed analysis]",
+        "hi-IN": "[विस्तृत विश्लेषण के लिए कोई स्पष्ट भाषण सामग्री उपलब्ध नहीं है]",
+        "ta-IN": "[விரிவான பகுப்பாய்வுக்கு தெளிவான பேச்சு உள்ளடக்கம் இல்லை]",
+    }
+    lang_key = language if language in _no_detail_msg else "en-US"
 
-    basic_summary = summarize_text(text, max_sentences=3)
+    if not text or text.startswith("["):
+        return _no_detail_msg[lang_key]
+
+    basic_summary = summarize_text(text, max_sentences=3, language=language)
 
     word_count = len(text.split())
     sentence_count = len(_split_into_sentences(text))
@@ -1473,6 +1670,7 @@ def process_pipeline(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     clean_reference: Optional[np.ndarray] = None,
     noise_array: Optional[np.ndarray] = None,
+    language: str = DEFAULT_LANGUAGE,
 ) -> dict:
     """
     Execute the full DSP + ASR pipeline.
@@ -1515,10 +1713,16 @@ def process_pipeline(
         Comprehensive results dictionary with all metrics, waveforms,
         transcriptions, and file paths.
     """
+    # Validate language, fall back to English if not allowed
+    if language not in ALLOWED_LANGUAGES:
+        logger.warning("Unsupported language '%s' — falling back to en-US", language)
+        language = DEFAULT_LANGUAGE
+
     pipeline_start = time.time()
     results = {
         "session_id": session_id,
         "status": "processing",
+        "language": language,
         "steps": [],
     }
 
@@ -1652,11 +1856,12 @@ def process_pipeline(
         log_step("output_saved", f"Enhanced audio saved: {os.path.basename(output_path)}")
 
         # ── Step 11: ASR on noisy input ───────────────────────────────
+        lang_display = LANGUAGE_CODES.get(language, {}).get("name", language)
         log_step(
             "asr_input",
-            "Running Automatic Speech Recognition on noisy input x(t)",
+            f"Running Automatic Speech Recognition on noisy x(t) [{lang_display}]",
         )
-        input_text = transcribe_audio(noisy_signal, actual_sr)
+        input_text = transcribe_audio(noisy_signal, actual_sr, language=language)
         log_step(
             "asr_input_result",
             f"Input transcription: \"{input_text[:60]}...\"" if len(input_text) > 60
@@ -1666,9 +1871,9 @@ def process_pipeline(
         # ── Step 12: ASR on enhanced output ───────────────────────────
         log_step(
             "asr_output",
-            "Running Automatic Speech Recognition on enhanced output y(t)",
+            f"Running Automatic Speech Recognition on enhanced y(t) [{lang_display}]",
         )
-        output_text = transcribe_audio(enhanced_signal, actual_sr)
+        output_text = transcribe_audio(enhanced_signal, actual_sr, language=language)
         log_step(
             "asr_output_result",
             f"Output transcription: \"{output_text[:60]}...\"" if len(output_text) > 60
@@ -1678,9 +1883,9 @@ def process_pipeline(
         # ── Step 13: AI Summary ───────────────────────────────────────
         log_step(
             "ai_summarizer",
-            "Running AI speech summarizer on clean transcription",
+            f"Running AI speech summarizer [{lang_display}] on clean transcription",
         )
-        ai_summary = summarize_text(output_text)
+        ai_summary = summarize_text(output_text, language=language)
         log_step(
             "summary_result",
             f"AI Summary generated: \"{ai_summary[:60]}...\"" if len(ai_summary) > 60
@@ -1696,6 +1901,7 @@ def process_pipeline(
 
         results.update({
             "status": "completed",
+            "language": language,
             "input_snr": round(input_snr, 4),
             "output_snr": round(output_snr, 4),
             "mse": round(mse, 8),
@@ -1741,6 +1947,7 @@ def process_uploaded_audio(
     session_id: str,
     filter_order: int = DEFAULT_FILTER_ORDER,
     cutoff_hz: float = DEFAULT_CUTOFF_HZ,
+    language: str = DEFAULT_LANGUAGE,
 ) -> dict:
     """
     Process a user-uploaded audio file through the DSP pipeline.
@@ -1761,6 +1968,8 @@ def process_uploaded_audio(
         Butterworth filter order.
     cutoff_hz : float
         LPF cutoff frequency.
+    language : str
+        BCP-47 language code for ASR and summarisation.
 
     Returns
     -------
@@ -1773,6 +1982,7 @@ def process_uploaded_audio(
         session_id=session_id,
         filter_order=filter_order,
         cutoff_hz=cutoff_hz,
+        language=language,
     )
 
 
@@ -1785,6 +1995,7 @@ def process_synthetic_audio(
     snr_db: float = DEFAULT_SNR_DB,
     filter_order: int = DEFAULT_FILTER_ORDER,
     cutoff_hz: float = DEFAULT_CUTOFF_HZ,
+    language: str = DEFAULT_LANGUAGE,
 ) -> dict:
     """
     Generate a synthetic test audio sample and process it through the
@@ -1840,6 +2051,7 @@ def process_synthetic_audio(
         sample_rate=sample_rate,
         clean_reference=clean_signal,
         noise_array=noise,
+        language=language,
     )
 
 

@@ -92,6 +92,9 @@ from speech_engine import (
     DEFAULT_CUTOFF_HZ,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_DURATION,
+    LANGUAGE_CODES,
+    ALLOWED_LANGUAGES,
+    DEFAULT_LANGUAGE,
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -622,6 +625,18 @@ def _register_routes(app: Flask) -> None:
         sample_type = db_session.sample_type
         input_path = db_session.input_audio_path
 
+        # Read language from request body (default to English)
+        req_data = request.get_json(silent=True) or {}
+        language = req_data.get("language", DEFAULT_LANGUAGE)
+        if language not in ALLOWED_LANGUAGES:
+            language = DEFAULT_LANGUAGE
+            logger.warning("Invalid language requested — defaulting to en-US")
+
+        logger.info(
+            "Processing session %s with language: %s",
+            session_id[:8], language,
+        )
+
         if not input_path or not os.path.isfile(input_path):
             # Try to find the file in uploads
             possible_files = list(UPLOAD_DIR.glob(f"input_{session_id}.*"))
@@ -645,12 +660,14 @@ def _register_routes(app: Flask) -> None:
                         duration=sample_info.get("duration_seconds", DEFAULT_DURATION),
                         sample_rate=DEFAULT_SAMPLE_RATE,
                         snr_db=sample_info.get("snr_db", 5.0),
+                        language=language,
                     )
                 else:
                     results = process_uploaded_audio(
                         input_path=input_path,
                         output_dir=str(PROCESSED_DIR),
                         session_id=session_id,
+                        language=language,
                     )
             else:
                 # User upload
@@ -658,6 +675,7 @@ def _register_routes(app: Flask) -> None:
                     input_path=input_path,
                     output_dir=str(PROCESSED_DIR),
                     session_id=session_id,
+                    language=language,
                 )
 
             # Check for pipeline failure
@@ -730,6 +748,64 @@ def _register_routes(app: Flask) -> None:
         response_data["logs"] = get_processing_logs(session_id)
 
         return api_response(response_data)
+
+    # ──────────────────────────────────────────────────────────────────
+    #  ROUTE: RE-SUMMARIZE (instant language switch on Page 5)
+    # ──────────────────────────────────────────────────────────────────
+
+    @app.route("/api/re-summarize/<session_id>", methods=["POST"])
+    def re_summarize(session_id: str):
+        """
+        Re-generate the AI summary for an existing session in a different
+        language, using the already-stored transcription text.
+
+        This is the fast path invoked when the user switches language on
+        Page 5 — no audio re-processing required, response is sub-second.
+
+        Request body (JSON)
+        -------------------
+        language : str
+            Target BCP-47 language code ("en-US", "hi-IN", "ta-IN").
+
+        Returns
+        -------
+        JSON
+            { ai_summary, language, session_id }
+        """
+        from speech_engine import summarize_text as _summarize
+
+        db_session = get_session(session_id)
+        if db_session is None:
+            return api_error(f"Session not found: {session_id}", 404)
+
+        req_data = request.get_json(silent=True) or {}
+        language = req_data.get("language", DEFAULT_LANGUAGE)
+        if language not in ALLOWED_LANGUAGES:
+            language = DEFAULT_LANGUAGE
+
+        # Use the stored output transcription (y(t)) for re-summarisation
+        output_text = db_session.output_text or ""
+
+        if not output_text or output_text.startswith("["):
+            # Fall back to input text if output is blank
+            output_text = db_session.input_text or ""
+
+        import time as _time
+        t0 = _time.time()
+        ai_summary = _summarize(output_text, max_sentences=3, language=language)
+        elapsed = round(_time.time() - t0, 3)
+
+        logger.info(
+            "Re-summarise session %s | lang=%s | %.3fs",
+            session_id[:8], language, elapsed,
+        )
+
+        return api_response({
+            "session_id": session_id,
+            "language": language,
+            "ai_summary": ai_summary,
+            "elapsed_seconds": elapsed,
+        }, message="Re-summarisation complete.")
 
     # ──────────────────────────────────────────────────────────────────
     #  ROUTE: SERVE AUDIO FILES
